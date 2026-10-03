@@ -1,0 +1,25 @@
+const assert = require('assert');
+const { createSignatureHandler, signParameters } = require('../lib/uploadSignature');
+const env={CLOUDINARY_CLOUD_NAME:'test-cloud',CLOUDINARY_API_KEY:'key',CLOUDINARY_API_SECRET:'private'};
+const res=()=>({statusCode:200,headers:{},set(k,v){this.headers[k]=v;return this;},status(s){this.statusCode=s;return this;},json(body){this.body=body;return this;}});
+const req=(token='Bearer valid')=>({get:()=>token,body:{public_id:'attacker',overwrite:true}});
+(async()=>{
+ let checks=0;
+ const valid=createSignatureHandler({verifyToken:async()=>({uid:'user'}),env,now:()=>1700000000000});
+ let r=res();await valid(req(''),r);assert.equal(r.statusCode,401);checks++;
+ const invalid=createSignatureHandler({verifyToken:async()=>{throw new Error('bad token');},env});
+ r=res();await invalid(req(),r);assert.equal(r.statusCode,401);checks++;
+ const missing=createSignatureHandler({verifyToken:async()=>({uid:'user'}),env:{}});
+ r=res();await missing(req(),r);assert.equal(r.statusCode,503);checks++;
+ r=res();await valid(req(),r);
+ assert.equal(r.statusCode,200);assert.equal(r.body.params.overwrite,'false');assert(r.body.params.public_id.startsWith('oneshot/'));
+ assert.equal(r.body.params.allowed_formats,'jpg,jpeg,png,webp');
+ assert.equal(r.body.signature,signParameters(r.body.params,'private'));
+ assert(!JSON.stringify(r.body).includes('private'));assert.equal(r.headers['Cache-Control'],'no-store');checks++;
+ for(let i=0;i<9;i++)await valid(req(),res());
+ r=res();await valid(req(),r);assert.equal(r.statusCode,429);checks++;
+ const config=createSignatureHandler({verifyToken:async()=>{throw Object.assign(new Error(),{code:'upload/configuration'});},env});
+ r=res();await config(req(),r);assert.equal(r.statusCode,503);checks++;
+ assert.equal(signParameters({b:2,a:1},'private'),signParameters({a:1,b:2},'private'));checks++;
+ console.log(`${checks} upload-signature checks passed.`);
+})().catch(e=>{console.error(e);process.exitCode=1;});

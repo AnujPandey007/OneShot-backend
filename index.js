@@ -13,6 +13,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', require('./routes/uploads'));
 
 const port = process.env.PORT || 3000;
 
