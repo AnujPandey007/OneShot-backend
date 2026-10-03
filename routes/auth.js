@@ -5,8 +5,7 @@ const express = require('express');
 
 const router = express.Router();
 
-//APIs
-
+//API
 router.post('/register', async(req, res)=>{
     try{
 
